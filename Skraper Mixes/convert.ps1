@@ -1,23 +1,17 @@
 # convert.ps1 – Extract <desc> from Skraper XML into media\text\<game>.txt
-# It will:
-#  • Recursively find all .xml files under the script root
-#  • For each, create a media\text folder beside it (if missing)
-#  • For each <game>, write a UTF-8 .txt named after the ROM, containing only its <desc>
 
-# Recursively collect all XML files from where this script is run
-$xmlFiles = Get-ChildItem -Path $PSScriptRoot -Filter *.xml -Recurse -File
+# Find all .xml files recursively
+$xmlFiles = Get-ChildItem -Path $PSScriptRoot -Filter '*.xml' -Recurse -File
 
-if (-not $xmlFiles) {
+if ($xmlFiles.Count -eq 0) {
     Write-Warning "No XML files found under $PSScriptRoot"
     exit 1
 }
 
-# Relative subfolder for output under each XML’s folder
-$relativeOut = 'media\text'
-
 foreach ($xmlFile in $xmlFiles) {
+
+    # Try to load the XML
     try {
-        # 3) Load XML
         [xml]$doc = Get-Content $xmlFile.FullName -ErrorAction Stop
     }
     catch {
@@ -25,50 +19,43 @@ foreach ($xmlFile in $xmlFiles) {
         continue
     }
 
-    # Determine the output folder next to this XML
-    $baseDir = $xmlFile.DirectoryName
-    $outputFolder = Join-Path $baseDir $relativeOut
-
-    # Create it if missing
-    if (-not (Test-Path $outputFolder)) {
+    # Ensure media\text folder exists alongside the XML
+    $outputDir = Join-Path $xmlFile.DirectoryName 'media\text'
+    if (-not (Test-Path $outputDir)) {
         try {
-            New-Item -ItemType Directory -Path $outputFolder -Force | Out-Null
+            New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
         }
         catch {
-            Write-Warning "Cannot create folder '$outputFolder': $_"
+            Write-Warning "Cannot create folder '$outputDir': $_"
             continue
         }
     }
 
-    # Process each <game>
+    # Grab all <game> nodes
     $games = $doc.SelectNodes('//game')
-    if (-not $games) {
-        Write-Host "No <game> nodes in '$($xmlFile.Name)'. Skipping."
+    if ($null -eq $games) {
+        Write-Host "No <game> entries in '$($xmlFile.Name)', skipping."
         continue
     }
 
     foreach ($game in $games) {
-        # Safely extract nodes
         $pathNode = $game.SelectSingleNode('path')
         $descNode = $game.SelectSingleNode('desc')
 
-        if (-not $pathNode -or -not $descNode) {
-            Write-Warning "Missing <path> or <desc> in a <game> of '$($xmlFile.Name)'. Skipping entry."
+        if ($null -eq $pathNode -or $null -eq $descNode) {
+            Write-Warning "Missing <path> or <desc> in one <game> of '$($xmlFile.Name)', skipping."
             continue
         }
 
-        $romPath = $pathNode.InnerText.Trim()
-        $desc    = $descNode.InnerText
-
-        # Derive a safe filename
+        # Build a safe filename from the ROM path
+        $romPath  = $pathNode.InnerText.Trim()
         $baseName = [IO.Path]::GetFileNameWithoutExtension($romPath)
-        # Remove any invalid chars for Windows filenames
-        $safeName = [IO.Path]::GetInvalidFileNameChars() | ForEach-Object { $baseName = $baseName -replace [Regex]::Escape($_), '_' }
-        $outFile  = Join-Path $outputFolder "$safeName.txt"
+        $safeName = $baseName -replace '[\\/:*?"<>|]', '_'
+        $outFile  = Join-Path $outputDir ("$safeName.txt")
 
+        # Write the description as UTF-8
         try {
-            # Write the description as UTF8
-            Set-Content -Path $outFile -Value $desc -Encoding UTF8 -Force
+            Set-Content -Path $outFile -Value $descNode.InnerText -Encoding UTF8 -Force
             Write-Host "✔ Wrote '$outFile'"
         }
         catch {
@@ -77,4 +64,4 @@ foreach ($xmlFile in $xmlFiles) {
     }
 }
 
-Write-Host "Done processing all XML files." -ForegroundColor Green
+Write-Host 'Done processing all XML files.' -ForegroundColor Green
