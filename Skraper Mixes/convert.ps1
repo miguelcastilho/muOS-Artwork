@@ -1,7 +1,7 @@
 # convert.ps1 – Extract <desc> from Skraper XML into media\text\<game>.txt
 
-# Find all .xml files recursively
-$xmlFiles = Get-ChildItem -Path $PSScriptRoot -Filter '*.xml' -Recurse -File
+# 1) Find all .xml files recursively
+$xmlFiles = Get-ChildItem -Path $PSScriptRoot -Filter "*.xml" -Recurse -File
 
 if ($xmlFiles.Count -eq 0) {
     Write-Warning "No XML files found under $PSScriptRoot"
@@ -9,8 +9,7 @@ if ($xmlFiles.Count -eq 0) {
 }
 
 foreach ($xmlFile in $xmlFiles) {
-
-    # Try to load the XML
+    # 2) Load the XML
     try {
         [xml]$doc = Get-Content $xmlFile.FullName -ErrorAction Stop
     }
@@ -19,8 +18,8 @@ foreach ($xmlFile in $xmlFiles) {
         continue
     }
 
-    # Ensure media\text folder exists alongside the XML
-    $outputDir = Join-Path $xmlFile.DirectoryName 'media\text'
+    # 3) Ensure media\text folder exists
+    $outputDir = Join-Path $xmlFile.DirectoryName "media\text"
     if (-not (Test-Path $outputDir)) {
         try {
             New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
@@ -31,37 +30,37 @@ foreach ($xmlFile in $xmlFiles) {
         }
     }
 
-    # Grab all <game> nodes
-    $games = $doc.SelectNodes('//game')
+    # 4) Extract each <game>
+    $games = $doc.SelectNodes("//game")
     if ($null -eq $games) {
         Write-Host "No <game> entries in '$($xmlFile.Name)', skipping."
         continue
     }
 
     foreach ($game in $games) {
-        $pathNode = $game.SelectSingleNode('path')
-        $descNode = $game.SelectSingleNode('desc')
+        $pathNode = $game.SelectSingleNode("path")
+        $descNode = $game.SelectSingleNode("desc")
 
         if ($null -eq $pathNode -or $null -eq $descNode) {
-            Write-Warning "Missing <path> or <desc> in one <game> of '$($xmlFile.Name)', skipping."
+            Write-Warning "Skipping an entry missing <path> or <desc> in '$($xmlFile.Name)'."
             continue
         }
 
-        # Build a safe filename from the ROM path
+        # 5) Sanitize the filename
         $romPath  = $pathNode.InnerText.Trim()
         $baseName = [IO.Path]::GetFileNameWithoutExtension($romPath)
         $safeName = $baseName -replace '[\\/:*?"<>|]', '_'
-        $outFile  = Join-Path $outputDir ("$safeName.txt")
+        $txtPath  = Join-Path $outputDir ("$safeName.txt")
 
-        # Write the description as UTF-8
+        # 6) Write the description
         try {
-            Set-Content -Path $outFile -Value $descNode.InnerText -Encoding UTF8 -Force
-            Write-Host "✔ Wrote '$outFile'"
+            Set-Content -Path $txtPath -Value $descNode.InnerText -Encoding UTF8 -Force
+            Write-Host "✔ Wrote `"$txtPath`""
         }
         catch {
-            Write-Warning "Failed to write '$outFile': $_"
+            Write-Warning "Failed to write '$txtPath': $_"
         }
     }
 }
 
-Write-Host 'Done processing all XML files.' -ForegroundColor Green
+Write-Host "Done processing all XML files." -ForegroundColor Green
