@@ -55,7 +55,7 @@ foreach ($xmlFile in $xmlFiles) {
         # 6) Write the description
         try {
             Set-Content -Path $txtPath -Value $descNode.InnerText -Encoding UTF8 -Force
-            Write-Host "✔ Wrote `"$txtPath`""
+            Write-Host "✔ Wrote `$txtPath`"
         }
         catch {
             Write-Warning "Failed to write '$txtPath': $_"
